@@ -1,5 +1,6 @@
 "use client";
 
+import MarkdownRenderer from "@/components/markdown-renderer";
 import {
   Accordion,
   AccordionContent,
@@ -37,9 +38,11 @@ import {
   BarChart3Icon,
   CheckCircle2Icon,
   CircleCheckIcon,
+  CircleX,
   LightbulbIcon,
   SkipForwardIcon,
   XCircleIcon,
+  CircleQuestionMark,
 } from "lucide-react";
 import {
   useState,
@@ -53,7 +56,7 @@ type Stage = "options" | "solving" | "finish";
 
 type Result = {
   mathPuzzle: typeof MathPuzzleTable.$inferSelect;
-  answer: string;
+  userAnswer: string;
   skipped: boolean;
   usedHint: boolean;
 };
@@ -63,19 +66,35 @@ const HomePage = () => {
     (typeof MathPuzzleTable.$inferSelect)[]
   >([]);
   const [results, setResults] = useState<Result[]>([]);
-  const [currentPuzzle, setCurrentPuzzle] = useState(0);
-  const [stage, setStage] = useState<Stage>("finish");
+  const [currentPuzzleIndex, setCurrentPuzzleIndex] = useState(0);
+  const [stage, setStage] = useState<Stage>("options");
   const [numberOfPuzzles, setNumberOfPuzzles] = useState<number | null>(null);
   const [difficulties, setDifficulties] = useState<DifficultyLevel[]>([]);
   const [allowHints, setAllowHints] = useState(true);
-  const [showHint, setShowHint] = useState(false);
+
+  const reset = () => {
+    setMathPuzzles([]);
+    setResults([]);
+    setCurrentPuzzleIndex(0);
+    setNumberOfPuzzles(null);
+    setDifficulties([]);
+    setAllowHints(true);
+    setStage("options");
+  };
 
   return (
-    <div className="flex h-screen w-full items-center justify-center">
+    <div className="flex h-screen w-full items-center justify-center overflow-hidden">
       {stage === "solving" ? (
-        <Solving />
+        <Solving
+          mathPuzzles={mathPuzzles}
+          setResults={setResults}
+          setStage={setStage}
+          allowHints={allowHints}
+          currentPuzzleIndex={currentPuzzleIndex}
+          setCurrentPuzzleIndex={setCurrentPuzzleIndex}
+        />
       ) : stage === "finish" ? (
-        <Finish results={results} />
+        <Finish results={results} reset={reset} />
       ) : (
         <Options
           difficulties={difficulties}
@@ -94,165 +113,238 @@ const HomePage = () => {
 
 export default HomePage;
 
-const Solving = () => {
+const Solving = ({
+  mathPuzzles,
+  setResults,
+  allowHints,
+  setStage,
+  currentPuzzleIndex,
+  setCurrentPuzzleIndex,
+}: {
+  mathPuzzles: (typeof MathPuzzleTable.$inferSelect)[];
+  setResults: Dispatch<SetStateAction<Result[]>>;
+  allowHints: boolean;
+  setStage: Dispatch<SetStateAction<Stage>>;
+  currentPuzzleIndex: number;
+  setCurrentPuzzleIndex: Dispatch<SetStateAction<number>>;
+}) => {
+  const [userAnswer, setUserAnswer] = useState("");
+  const [usedHint, setUsedHint] = useState(false);
+  const [currentResult, setCurrentResult] = useState<
+    "correct" | "incorrect" | "skipped" | null
+  >(null);
+
+  const progress = Math.round(
+    ((currentPuzzleIndex + 1) / mathPuzzles.length) * 100
+  );
+  const currentPuzzle = mathPuzzles[currentPuzzleIndex];
+
+  const checkAnswer = (skipped = false) => {
+    if (skipped) {
+      const puzzleResult = {
+        mathPuzzle: currentPuzzle,
+        userAnswer,
+        skipped,
+        usedHint,
+      };
+      setResults((prev) => [...prev, puzzleResult]);
+      setCurrentResult("skipped");
+      return;
+    }
+    if (!userAnswer.trim()) return toast.error("User answer cannot be empty.");
+    const result =
+      currentPuzzle.answer.trim() === userAnswer.trim() ? "correct" : "incorrect";
+    const puzzleResult = {
+      mathPuzzle: currentPuzzle,
+      userAnswer,
+      skipped,
+      usedHint,
+    };
+    setResults((prev) => [...prev, puzzleResult]);
+    setCurrentResult(result);
+  };
+
+  const nextPuzzle = () => {
+    if (currentPuzzleIndex + 1 >= mathPuzzles.length) return setStage("finish");
+    setUsedHint(false);
+    setUserAnswer("");
+    setCurrentResult(null);
+    setCurrentPuzzleIndex((prev) => prev + 1);
+  };
+
   return (
     <div className="container p-4 space-y-4 max-h-[calc(100%-2rem)] overflow-y-auto">
       <Card>
-        <CardContent>
-          <Progress />
+        <CardContent className="flex items-center gap-2">
+          <p className="text-muted-foreground">
+            <span className="text-lg font-semibold text-primary">
+              {currentPuzzleIndex + 1}
+            </span>
+            /{mathPuzzles.length}
+          </p>
+          <Progress value={progress} />
         </CardContent>
       </Card>
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle className="text-3xl md:text-4xl">Problem # 10</CardTitle>
-            <Button variant="outline" className="cursor-pointer">
+            <CardTitle className="text-3xl md:text-4xl">
+              {currentPuzzle.title}
+            </CardTitle>
+            <Button
+              variant="outline"
+              disabled={!allowHints || currentResult !== null || usedHint}
+              className={allowHints ? "cursor-pointer" : "cursor-not-allowed"}
+              onClick={() => setUsedHint(true)}
+            >
               <span>Hint</span>
               <LightbulbIcon />
             </Button>
           </div>
 
           <div className="flex gap-2">
-            <Badge variant="outline">Hard</Badge>
-            <Badge variant="outline">Algebra</Badge>
+            <Badge variant="outline" className="capitalize">
+              {currentPuzzle.difficulty}
+            </Badge>
+            <Badge variant="outline">{currentPuzzle.category}</Badge>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-muted-foreground">
-            Lorem ipsum dolor sit amet consectetur, adipisicing elit. Aut,
-            voluptates iure! Libero debitis necessitatibus, perferendis fuga
-            itaque fugiat temporibus ratione dolorum fugit suscipit vero,
-            voluptatibus explicabo labore accusantium hic nemo?
-          </p>
-          <div className="bg-warning-foreground rounded-md p-4 text-warning">
-            <p className="text-sm ">
-              Lorem ipsum dolor sit amet consectetur adipisicing elit. Nemo esse
-              illo nisi corporis reiciendis eveniet accusantium quis autem non
-              laudantium. Veritatis tempora corporis voluptatem, quo assumenda
-              maiores distinctio enim aliquid!
-            </p>
+          <div className="text-muted-foreground">
+            <MarkdownRenderer content={currentPuzzle.problemText} />
           </div>
+          {usedHint && (
+            <div className="bg-warning-foreground rounded-md p-4 text-warning text-sm">
+              <MarkdownRenderer content={currentPuzzle.hint} />
+            </div>
+          )}
           <div className="flex gap-4">
-            <Input />
+            <Input
+              placeholder="Your answer goes here..."
+              value={userAnswer}
+              readOnly={currentResult !== null}
+              onChange={(e) => setUserAnswer(e.target.value)}
+            />
             <div className="flex gap-2">
-              <Button variant="secondary">Skip</Button>
-              <Button>Check Answer</Button>
+              <Button
+                disabled={currentResult !== null}
+                onClick={() => checkAnswer(true)}
+                variant="secondary"
+                className="cursor-pointer"
+              >
+                Skip
+              </Button>
+              <Button
+                className="cursor-pointer"
+                onClick={() =>
+                  currentResult == null ? checkAnswer() : nextPuzzle()
+                }
+              >
+                {currentResult == null
+                  ? "Check Answer"
+                  : currentPuzzleIndex + 1 >= mathPuzzles.length
+                  ? "Finish"
+                  : "Next"}
+              </Button>
             </div>
           </div>
-          <Accordion type="single" collapsible>
-            <AccordionItem
-              value="solution"
-              className="bg-success-foreground rounded-md"
-            >
-              <AccordionTrigger className="px-4 flex items-center cursor-pointer">
-                <div className="text-success flex items-center gap-2">
-                  <CircleCheckIcon />
-                  <span className="text-lg no-underline">
-                    Correct! The answer is 10
-                  </span>
-                </div>
-              </AccordionTrigger>
-              <AccordionContent className="px-4">
-                <p className="text-success">
-                  Lorem ipsum, dolor sit amet consectetur adipisicing elit.
-                  Iusto rem aliquam, officia, pariatur sint dolorum
-                  voluptatibus, harum reprehenderit voluptas facilis dolore iure
-                  repellendus aspernatur soluta assumenda voluptatem? Nobis,
-                  assumenda nulla!
-                </p>
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
-          <Accordion type="single" collapsible>
-            <AccordionItem
-              value="solution"
-              className="bg-destructive-foreground rounded-md"
-            >
-              <AccordionTrigger className="px-4 flex items-center cursor-pointer">
-                <div className="text-destructive flex items-center gap-2">
-                  <CircleCheckIcon />
-                  <span className="text-lg no-underline">
-                    Sorry, incorrect... The answer is 10
-                  </span>
-                </div>
-              </AccordionTrigger>
-              <AccordionContent className="px-4">
-                <p className="text-destructive">
-                  Lorem ipsum, dolor sit amet consectetur adipisicing elit.
-                  Iusto rem aliquam, officia, pariatur sint dolorum
-                  voluptatibus, harum reprehenderit voluptas facilis dolore iure
-                  repellendus aspernatur soluta assumenda voluptatem? Nobis,
-                  assumenda nulla!
-                </p>
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
+          {currentResult ? (
+            currentResult === "correct" ? (
+              <Accordion type="single" collapsible>
+                <AccordionItem
+                  value="solution"
+                  className="bg-success-foreground rounded-md"
+                >
+                  <AccordionTrigger className="px-4 flex items-center cursor-pointer">
+                    <div className="text-success flex items-center gap-2">
+                      <CircleCheckIcon className="size-4" />
+                      <span className="text-md no-underline">
+                        Correct! The answer is {currentPuzzle.answer}
+                      </span>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-4">
+                    <div className="text-success">
+                      <MarkdownRenderer
+                        content={currentPuzzle.solutionOutline}
+                      />
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            ) : currentResult === "incorrect" ? (
+              <Accordion type="single" collapsible>
+                <AccordionItem
+                  value="solution"
+                  className="bg-destructive-foreground rounded-md"
+                >
+                  <AccordionTrigger className="px-4 flex items-center cursor-pointer">
+                    <div className="text-destructive flex items-center gap-2">
+                      <CircleX className="size-4" />
+                      <span className="text-md no-underline">
+                        Sorry, incorrect... The answer is {currentPuzzle.answer}
+                      </span>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-4">
+                    <div className="text-destructive">
+                      <MarkdownRenderer
+                        content={currentPuzzle.solutionOutline}
+                      />
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            ) : (
+              <Accordion type="single" collapsible>
+                <AccordionItem
+                  value="solution"
+                  className="rounded-md text-muted-foreground bg-muted-foreground/15"
+                >
+                  <AccordionTrigger className="px-4 flex items-center cursor-pointer">
+                    <div className="flex items-center gap-2">
+                      <CircleQuestionMark className="size-4" />
+                      <span className="text-md no-underline">
+                        The answer is {currentPuzzle.answer}
+                      </span>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-4">
+                    <div>
+                      <MarkdownRenderer
+                        content={currentPuzzle.solutionOutline}
+                      />
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            )
+          ) : (
+            <></>
+          )}
         </CardContent>
       </Card>
     </div>
   );
 };
 
-const Finish = ({ results }: { results?: Result[] }) => {
-  const placeholderResults: Result[] = [
-    {
-      mathPuzzle: {
-        id: "1",
-        title: "Prime Staircase",
-        difficulty: "easy",
-        problemText:
-          "Find the next step in the prime staircase: 2, 3, 5, 11, 17, ?",
-        solutionOutline: "Notice the staircase skips primes with growing gaps.",
-        answer: "23",
-        hint: "Look at the differences between consecutive primes.",
-      },
-      answer: "23",
-      skipped: false,
-      usedHint: false,
-    },
-    {
-      mathPuzzle: {
-        id: "2",
-        title: "Matrix Fold",
-        difficulty: "medium",
-        problemText:
-          "A 3x3 matrix folds along its main diagonal. Which entries overlap?",
-        solutionOutline:
-          "Trace each cell to its mirrored partner across the diagonal.",
-        answer: "All off-diagonal pairs overlap; diagonals stay in place.",
-        hint: "Sketch the grid and fold it physically or mentally.",
-      },
-      answer: "All off-diagonal pairs overlap; diagonals stay in place.",
-      skipped: false,
-      usedHint: true,
-    },
-    {
-      mathPuzzle: {
-        id: "3",
-        title: "Rapid Sums",
-        difficulty: "hard",
-        problemText: "What is the sum of the first 20 positive integers?",
-        solutionOutline: "Use the arithmetic series formula n(n+1)/2.",
-        answer: "210",
-        hint: "Pair the first and last numbers.",
-      },
-      answer: "",
-      skipped: true,
-      usedHint: true,
-    },
-  ];
-
-  const data = results?.length ? results : placeholderResults;
-  const total = data.length;
-  const skipped = data.filter((res) => res.skipped).length;
-  const correct = data.filter(
+const Finish = ({
+  results,
+  reset,
+}: {
+  results: Result[];
+  reset: () => void;
+}) => {
+  const total = results.length;
+  const skipped = results.filter((res) => res.skipped).length;
+  const correct = results.filter(
     (res) =>
       !res.skipped &&
-      res.answer.trim().toLowerCase() ===
+      res.userAnswer.trim().toLowerCase() ===
         res.mathPuzzle.answer.trim().toLowerCase()
   ).length;
   const incorrect = total - correct - skipped;
-  const hintsUsed = data.filter((res) => res.usedHint).length;
+  const hintsUsed = results.filter((res) => res.usedHint).length;
   const accuracy = Math.round((correct / Math.max(total - skipped, 1)) * 100);
 
   const renderStatusBadge = (
@@ -283,8 +375,8 @@ const Finish = ({ results }: { results?: Result[] }) => {
   };
 
   return (
-    <div className="space-y-6 container py-2">
-      <div className="grid gap-4 md:grid-cols-3 max-h-[calc(100%-2rem)]">
+    <div className="container flex h-full max-h-[calc(100vh-2rem)] min-h-0 flex-col space-y-6 overflow-hidden py-2">
+      <div className="grid h-full min-h-0 gap-4 md:grid-cols-3">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl">
@@ -292,52 +384,53 @@ const Finish = ({ results }: { results?: Result[] }) => {
               Session Summary
             </CardTitle>
             <CardDescription>
-              Quick snapshot of how this run went.
+              Quick snapshot of how this session went.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center justify-between rounded-lg border bg-muted/40 p-3">
-              <div>
+            <div className="flex flex-col gap-2 rounded-lg border bg-muted/40 p-3">
+              <div className="flex w-full items-center justify-between">
                 <p className="text-sm text-muted-foreground">Accuracy</p>
                 <p className="text-2xl font-semibold">{accuracy}%</p>
               </div>
-              <div className="w-28">
+              <div className="w-full">
                 <Progress value={accuracy} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-lg border p-3">
-                <p className="text-muted-foreground">Correct</p>
-                <p className="text-lg font-semibold text-success">{correct}</p>
+              <div className="rounded-lg p-3 border border-success/40 bg-success-foreground/20 text-success">
+                <p className="text-success">Correct</p>
+                <p className="text-lg font-semibold">{correct}</p>
               </div>
-              <div className="rounded-lg border p-3">
-                <p className="text-muted-foreground">Incorrect</p>
-                <p className="text-lg font-semibold text-destructive">
-                  {incorrect}
-                </p>
+              <div className="rounded-lg p-3 border border-destructive/40 bg-destructive-foreground/20 text-destructive">
+                <p>Incorrect</p>
+                <p className="text-lg font-semibold">{incorrect}</p>
               </div>
-              <div className="rounded-lg border p-3">
-                <p className="text-muted-foreground">Skipped</p>
-                <p className="text-lg font-semibold text-warning">{skipped}</p>
+              <div className="rounded-lg border border-warning/40 p-3 bg-warning-foreground/20 text-warning">
+                <p>Skipped</p>
+                <p className="text-lg font-semibold">{skipped}</p>
               </div>
               <div className="rounded-lg border p-3">
                 <p className="text-muted-foreground">Hints Used</p>
                 <p className="text-lg font-semibold">{hintsUsed}</p>
               </div>
             </div>
+            <Button className="w-full cursor-pointer" onClick={reset}>
+              Start New Session
+            </Button>
           </CardContent>
         </Card>
-        <Card className="md:col-span-2 max-h-full overflow-y-auto">
-          <CardHeader>
+        <Card className="md:col-span-2 flex min-h-0 max-h-full flex-col overflow-clip">
+          <CardHeader className="shrink-0">
             <CardTitle className="text-xl">Puzzle Breakdown</CardTitle>
             <CardDescription>
               Each problem with your answer, correctness, and hint usage.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {data.map((res, index) => {
+          <CardContent className="min-h-0 space-y-4 overflow-y-auto p-4">
+            {results.map((res, index) => {
               const isCorrect =
-                res.answer.trim().toLowerCase() ===
+                res.userAnswer.trim().toLowerCase() ===
                 res.mathPuzzle.answer.trim().toLowerCase();
               const status = res.skipped
                 ? "skipped"
@@ -349,57 +442,57 @@ const Finish = ({ results }: { results?: Result[] }) => {
                   key={res.mathPuzzle.id ?? index}
                   className="rounded-lg border bg-card/40 p-4 shadow-sm"
                 >
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="space-y-1">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                        Puzzle {index + 1}
-                      </p>
-                      <h3 className="text-lg font-semibold">
-                        {res.mathPuzzle.title}
-                      </h3>
-                      <div className="flex flex-wrap gap-2">
-                        <Badge variant="outline" className="capitalize">
-                          {res.mathPuzzle.difficulty}
+                  <div className="space-y-1">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Puzzle {index + 1}
+                    </p>
+                    <h3 className="text-lg font-semibold">
+                      {res.mathPuzzle.title}
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="outline" className="capitalize">
+                        {res.mathPuzzle.difficulty}
+                      </Badge>
+                      <Badge variant="outline">
+                        {res.mathPuzzle.category}
+                      </Badge>
+                      {renderStatusBadge(status)}
+                      {res.usedHint ? (
+                        <Badge className="border-transparent bg-warning-foreground text-warning">
+                          <LightbulbIcon className="size-3.5" />
+                          Hint used
                         </Badge>
-                        {renderStatusBadge(status)}
-                        {res.usedHint ? (
-                          <Badge className="border-transparent bg-warning-foreground text-warning">
-                            <LightbulbIcon className="size-3.5" />
-                            Hint used
-                          </Badge>
-                        ) : null}
-                      </div>
-                    </div>
-                    <div className="text-right text-sm text-muted-foreground">
-                      <p className="font-medium">Answer key</p>
-                      <p className="text-foreground">
-                        {res.mathPuzzle.answer || "Not provided"}
-                      </p>
+                      ) : null}
                     </div>
                   </div>
-                  <p className="mt-3 text-sm text-muted-foreground">
-                    {res.mathPuzzle.problemText}
-                  </p>
+                  <div className="mt-3 text-sm text-muted-foreground">
+                    <MarkdownRenderer content={res.mathPuzzle.problemText} />
+                  </div>
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
                     <div className="rounded-md border border-border/60 bg-muted/40 p-3 text-sm">
                       <p className="text-muted-foreground">Your answer</p>
                       <p className="font-medium">
-                        {res.answer.trim() ? res.answer : "No answer given"}
+                        {res.userAnswer.trim()
+                          ? res.userAnswer
+                          : "No answer given"}
                       </p>
                     </div>
                     <div className="rounded-md border border-border/60 bg-success-foreground/20 p-3 text-sm">
-                      <p className="text-muted-foreground">Correct answer</p>
+                      <p className="text-success">Correct answer</p>
                       <p className="font-medium text-success">
                         {res.mathPuzzle.answer}
                       </p>
                     </div>
                   </div>
                   {res.mathPuzzle.solutionOutline ? (
-                    <div className="mt-3 rounded-md border border-border/60 bg-muted/30 p-3 text-sm">
+                    <div className="mt-3 rounded-md border border-border/60 bg-muted/30 p-3 text-sm space-y-2">
                       <p className="text-muted-foreground">Solution outline</p>
-                      <p className="font-medium text-foreground">
-                        {res.mathPuzzle.solutionOutline}
-                      </p>
+                      <hr className="text-muted-foreground" />
+                      <div className="font-medium text-foreground/70">
+                        <MarkdownRenderer
+                          content={res.mathPuzzle.solutionOutline}
+                        />
+                      </div>
                     </div>
                   ) : null}
                 </div>
@@ -434,10 +527,14 @@ const Options = ({
   setStage: Dispatch<SetStateAction<Stage>>;
 }) => {
   const [loading, setLoading] = useState(false);
+
   const startSession = async () => {
     if (numberOfPuzzles == null || !String(numberOfPuzzles).trim())
       return toast.error("Please set a number of puzzles.");
+    if (numberOfPuzzles < 1 || !Number.isInteger(numberOfPuzzles))
+      return toast.error("Invalid puzzle amount.");
     setLoading(true);
+
     const res = await getMathPuzzles({ numberOfPuzzles, difficulties });
     if ((res.error && res.message) || !res.puzzles) {
       setLoading(false);
