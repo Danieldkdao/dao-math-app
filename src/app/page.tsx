@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/multi-select";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
+import { mathPuzzleData } from "@/data/math-puzzles";
 import {
   difficultyLevels,
   type DifficultyLevel,
@@ -153,7 +154,9 @@ const Solving = ({
     }
     if (!userAnswer.trim()) return toast.error("User answer cannot be empty.");
     const result =
-      currentPuzzle.answer.trim() === userAnswer.trim() ? "correct" : "incorrect";
+      currentPuzzle.answer.trim() === userAnswer.trim()
+        ? "correct"
+        : "incorrect";
     const puzzleResult = {
       mathPuzzle: currentPuzzle,
       userAnswer,
@@ -453,9 +456,7 @@ const Finish = ({
                       <Badge variant="outline" className="capitalize">
                         {res.mathPuzzle.difficulty}
                       </Badge>
-                      <Badge variant="outline">
-                        {res.mathPuzzle.category}
-                      </Badge>
+                      <Badge variant="outline">{res.mathPuzzle.category}</Badge>
                       {renderStatusBadge(status)}
                       {res.usedHint ? (
                         <Badge className="border-transparent bg-warning-foreground text-warning">
@@ -528,19 +529,40 @@ const Options = ({
 }) => {
   const [loading, setLoading] = useState(false);
 
-  const startSession = async () => {
+  const startSession = () => {
     if (numberOfPuzzles == null || !String(numberOfPuzzles).trim())
       return toast.error("Please set a number of puzzles.");
     if (numberOfPuzzles < 1 || !Number.isInteger(numberOfPuzzles))
       return toast.error("Invalid puzzle amount.");
     setLoading(true);
 
-    const res = await getMathPuzzles({ numberOfPuzzles, difficulties });
-    if ((res.error && res.message) || !res.puzzles) {
+    const shuffleArray = (array: any[]) => {
+      for (let i = array.length; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+      return array;
+    };
+
+    const puzzles = shuffleArray(
+      mathPuzzleData.filter((puzzle) =>
+        difficulties.includes(puzzle.difficulty as DifficultyLevel)
+      )
+    );
+
+    // async with db
+    // const res = await getMathPuzzles({ numberOfPuzzles, difficulties });
+    // if ((res.error && res.message) || !res.puzzles) {
+    //   setLoading(false);
+    //   return toast.error(res.message ?? "Failed to start session.");
+    // }
+    
+    if (!puzzles.length) {
       setLoading(false);
-      return toast.error(res.message ?? "Failed to start session.");
+      return toast.error("No puzzles found");
     }
-    setMathPuzzles(res.puzzles);
+    setMathPuzzles(puzzles);
     setStage("solving");
     setLoading(false);
   };
