@@ -549,7 +549,7 @@ const Options = ({
       mathPuzzleData.filter((puzzle) =>
         difficulties.includes(puzzle.difficulty as DifficultyLevel)
       )
-    );
+    ).slice(0, numberOfPuzzles);
 
     // async with db
     // const res = await getMathPuzzles({ numberOfPuzzles, difficulties });
